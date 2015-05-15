@@ -4,9 +4,11 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <mpi.h>
+#include <string.h>
+#include "mpi.h"
 #include "libbb.h"
-using namespace MPI;
+using namespace std;
+//using namespace MPI;
 extern unsigned int NCIUDADES;
 
 // Tipos de mensajes que se env�an los procesos
@@ -25,8 +27,8 @@ const int NEGRO = 1;
 
 
 // Comunicadores que usar� cada proceso
-Intracomm comunicadorCarga;	// Para la distribuci�n de la carga
-Intracomm comunicadorCota;	// Para la difusi�n de una nueva cota superior detectada
+MPI_Comm comunicadorCarga;	// Para la distribuci�n de la carga
+MPI_Comm comunicadorCota;	// Para la difusi�n de una nueva cota superior detectada
 
 // Variables que indican el estado de cada proceso
 extern int rank;	 // Identificador del proceso dentro de cada comunicador (coincide en ambos)
@@ -39,6 +41,9 @@ int anterior;	// Identificador del anterior proceso
 int siguiente;	// Identificador del siguiente proceso
 bool difundir_cs_local;	// Indica si el proceso puede difundir su cota inferior local
 bool pendiente_retorno_cs;	// Indica si el proceso est� esperando a recibir la cota inferior de otro proceso
+
+char salida_ini[10];
+char salida_fin[7];
 
 
 /* ********************************************************************* */
@@ -394,5 +399,35 @@ int ** reservarMatrizCuadrada(unsigned int orden) {
 void liberarMatriz(int** m) {
 	delete [] m[0];
 	delete [] m;
+}
+
+
+/* ******************************************************************** */
+/******** Mis funciones
+/* ******************************************************************** */
+void inicializar_estado_proceso(bool salida=false)
+{
+	// Determinamos rank y size.
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+	// Determinamos anterior y siguiente.
+	(rank==0) ? anterior=size-1 : anterior=rank-1;
+	siguiente = (rank + 1) % size;
+
+	// Determinamos el color de la salida por el terminal.
+	// El color dependerá del rank del proceso.
+	char aux[2];
+	sprintf(aux,"%d",31+rank);
+	strcpy(salida_ini,"\033[1;");
+	strcat(salida_ini,aux);
+	strcat(salida_ini,"m");
+	strcpy(salida_fin,"\033[0m");
+
+	if(salida) {
+		cout<<salida_ini;
+		cout<<" Proceso "<<rank<<" de "<<size<<". P"<<anterior<<" --> P"<<rank<<" -->P"<<siguiente;
+		cout<<salida_fin<<endl;
+	}
 }
 

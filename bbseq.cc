@@ -18,6 +18,7 @@ main (int argc, char **argv) {
 	// Iniciar MPI.
 	////
 	MPI_Init(&argc, &argv);
+	inicializar_estado_proceso(true);
 
 	////
 	// Control de errores de los datos de entrada.

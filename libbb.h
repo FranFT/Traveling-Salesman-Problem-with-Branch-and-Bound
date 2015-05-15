@@ -211,3 +211,10 @@ int ** reservarMatrizCuadrada(unsigned int orden);
 void liberarMatriz(int** m);
 /* ******************************************************************** */
 
+/* ******************************************************************** */
+/******** Mis funciones
+/* ******************************************************************** */
+//Inicializa los parámetros de cada proceso (rank, size, ...)
+void inicializar_estado_proceso(bool salida);
+
+
