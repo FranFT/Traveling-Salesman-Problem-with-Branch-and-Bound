@@ -216,5 +216,7 @@ void liberarMatriz(int** m);
 /* ******************************************************************** */
 //Inicializa los parámetros de cada proceso (rank, size, ...)
 void inicializar_estado_proceso(bool salida);
+// Función encargada de equilibrar la carga de trabajo entre los procesos.
+void Equilibrar_Carga(tPila *pila, bool *activo, bool salida);
 
 

@@ -442,3 +442,84 @@ void inicializar_estado_proceso(bool salida=false)
 	}
 }
 
+void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
+{
+	////// Si la pila se encuentra vacía:
+	if((*pila).vacia()) {
+
+		MPI_Request peticion_trabajo;
+		MPI_Request peticion_trabajo_reenviada;
+		MPI_Status estado;
+		int rank_aux = -1;
+
+		if(salida) {
+			cout<<salida_ini;
+			cout<<"Proceso "<<rank<<" tiene la pila vacía. Enviando petición de trabajo a P"<<siguiente;
+			cout<<salida_fin<<endl;
+		}
+
+		////// Se envía la petición de trabajo.
+		MPI_Isend(&rank, 1, MPI_INT, siguiente, PETICION, MPI_COMM_WORLD, &peticion_trabajo);
+
+		while((*pila).vacia() && activo)
+		{
+			////// Comprobación bloqueante de si hay mensajes pendientes.
+			MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &estado);
+
+			////// Cuando el proceso se desbloquea, vemos el tipo de mensaje que hay pendiente:
+			switch(estado.MPI_TAG) {
+				////// Se trata de una petición de trabajo.
+				case(PETICION):
+					////// Se recibe la petición y se reenvía al siguiente proceso.
+					MPI_Recv(&rank_aux, 1, MPI_INT, estado.MPI_SOURCE, PETICION, MPI_COMM_WORLD, &estado);
+					MPI_Isend(&rank_aux, 1, MPI_INT, siguiente, PETICION, MPI_COMM_WORLD, &peticion_trabajo_reenviada);
+					
+					if(salida) {
+						cout<<salida_ini;
+						cout<<"Reenviada PETICION del P"<<rank_aux<<" al P"<<siguiente;
+						cout<<salida_fin<<endl;
+					}
+
+					////// Si hemos recibido la misma petición que enviamos...
+					if(rank_aux == rank){ 
+						////// Iniciar posible detección de fin.
+					}
+					break;
+
+				////// Se trata de un mensaje que contiene nodos de un proceso donante.
+				case(NODOS):
+					////// RECIBIR NODOS EN LA PILA DIRECTAMENTE.
+					break;
+			}
+		}
+	}
+
+	////// El proceso tiene nodos para trabajar.
+	if(activo) {
+		MPI_Status estado;
+		MPI_Request peticion_trabajo_reenviada;
+		int num_peticiones;
+		int rank_aux;
+
+		////// Comprobamos si hay mensajes pendientes de otros procesos.
+		MPI_Iprobe(MPI_ANY_SOURCE, PETICION, MPI_COMM_WORLD, &num_peticiones, &estado);
+
+		////// Mientras halla pendientes peticiones de trabajo...
+		while(num_peticiones > 0) {
+			////// Recibimos la petición de trabajo.
+			MPI_Recv(&rank_aux, 1, MPI_INT, estado.MPI_SOURCE, PETICION, MPI_COMM_WORLD, &estado);
+
+			////// Si el número de nodos de la pila supera el umbral donamos nodos.
+			if((*pila).tamanio()>1) {
+				////// Dividir pila y enviar nodos.
+			}
+			////// En caso de no tener nodos suficientes, pasamos la petición al siguiente proceso.
+			else {
+				MPI_Isend(&rank_aux, 1, MPI_INT, siguiente, PETICION, MPI_COMM_WORLD, &peticion_trabajo_reenviada);
+			}
+			////// Comprobamos si hay mensajes pendientes.
+			MPI_Iprobe(MPI_ANY_SOURCE, PETICION, MPI_COMM_WORLD, &num_peticiones, &estado);
+		}
+	}
+}
+

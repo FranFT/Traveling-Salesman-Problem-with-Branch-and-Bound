@@ -105,11 +105,14 @@ main (int argc, char **argv) {
 
 		////// Se distribuye la matriz con los datos.
 		MPI_Bcast(&tsp0[0][0], NCIUDADES*NCIUDADES, MPI_INT, 0, MPI_COMM_WORLD);
-	
+
+		////// Los procesos que no son el P0 llaman a la función de equilibrado
+		////// de carga ya que actualmente no tienen trabajo.
+		if(rank != 0) Equilibrar_Carga(&pila, &activo, true);
+
+
 		////// Inicia la medida de tiempo.
 	    t=MPI::Wtime();
-
-
 		////
 		// Ciclo Branch&Bound.
 		////
