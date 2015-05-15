@@ -50,24 +50,35 @@ char salida_fin[7];
 /* ****************** Funciones para el Branch-Bound  ********************* */
 /* ********************************************************************* */
 
-void LeerMatriz (char archivo[], int** tsp) {
-  FILE *fp;
-  int i, j;
+void LeerMatriz (char archivo[], int** tsp, bool salida=false) {
+	FILE *fp;
+	int i, j;
 
-  if (!(fp = fopen(archivo, "r" ))) {
-    printf ("ERROR abriendo archivo %s en modo lectura.\n", archivo);
-    exit(1);
-  }
-  printf ("-------------------------------------------------------------\n");
-  for (i=0; i<NCIUDADES; i++) {
-    for (j=0; j<NCIUDADES; j++) {
-      fscanf( fp, "%d", &tsp[i][j] );
-      printf ("%3d", tsp[i][j]);
-    }
-    fscanf (fp, "\n");
-    printf ("\n");
-  }
-  printf ("-------------------------------------------------------------\n");
+	if (!(fp = fopen(archivo, "r" ))) {
+		printf ("ERROR abriendo archivo %s en modo lectura.\n", archivo);
+		exit(1);
+	}
+
+	for (i=0; i<NCIUDADES; i++) {
+		for (j=0; j<NCIUDADES; j++) {
+			fscanf( fp, "%d", &tsp[i][j] );
+		}
+		fscanf (fp, "\n");
+	}
+	
+	if(salida)
+	{
+		cout<<salida_ini;
+		printf ("-------------------------------------------------------------\n");
+		for (i=0; i<NCIUDADES; i++) {
+			for (j=0; j<NCIUDADES; j++) {
+			    printf ("%3d", tsp[i][j]);
+	    	}
+	    	printf ("\n");
+		}
+  		printf ("-------------------------------------------------------------\n");
+		cout<<salida_fin<<endl;
+	}
 }
 
 

@@ -111,7 +111,7 @@ class tPila{
 /* *** Cabeceras de funciones para el algoritmo de Branch-and-Bound *** */
 /* ********************************************************************* */
 
-void LeerMatriz (char archivo[], int** tsp) ;
+void LeerMatriz (char archivo[], int** tsp, bool salida) ;
 
 bool Inconsistente  (int** tsp);
   /* tsp   -  matriz de inicidencia del problema o subproblema            */

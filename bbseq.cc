@@ -36,7 +36,7 @@ main (int argc, char **argv) {
 	////
 	// Matriz que contiene los datos que se lean del fichero.
 	////
-	int** tsp0 = reservarMatrizCuadrada(NCIUDADES);
+	int** tsp0;
 
 	////
 	// Nodos empleados en el algoritmo.
@@ -77,13 +77,30 @@ main (int argc, char **argv) {
 	////// Inicializa la cota superior.
 	U = INFINITO;
 	////// Inicializa la estructura de datos 'nodo'.
-	InicNodo (&nodo); 
-	////// Lee los datos a partir del archivo en la matriz 'tsp0'.
-	LeerMatriz (argv[2], tsp0);
-	////// Indica si la matriz leida del fichero es correcta y en función de ello
-	////// marca como activa la fase Branch&Bound. Si la matriz es inconsistente
-	////// el algoritmo no iniciará.
-	activo = !Inconsistente(tsp0);
+	InicNodo (&nodo);
+
+	if(rank == 0) {
+		// Se reserva memoria
+		tsp0 = reservarMatrizCuadrada(NCIUDADES);
+		////// Lee los datos a partir del archivo en la matriz 'tsp0'.
+		LeerMatriz (argv[2], tsp0, true);
+		////// Indica si la matriz leida del fichero es correcta y en función de ello
+		////// marca como activa la fase Branch&Bound. Si la matriz es inconsistente
+		////// el algoritmo no iniciará.
+		activo = !Inconsistente(tsp0);
+	}
+
+	////// Se informa al resto de procesos si se continua o no.
+	MPI_Bcast(&activo, 1, MPI_BYTE, 0, MPI_COMM_WORLD);
+
+	////// Si hay que continuar:
+	if(activo) {
+		////// El resto de procesos reservan memoria.
+		if(rank != 0)	tsp0 = reservarMatrizCuadrada(NCIUDADES);
+
+		////// Se distribuye la matriz con los datos.
+		MPI_Bcast(&tsp0[0][0], NCIUDADES*NCIUDADES, MPI_INT, 0, MPI_COMM_WORLD);
+	}
 	////// Inicia la medida de tiempo.
     double t=MPI::Wtime();
 
@@ -171,7 +188,7 @@ main (int argc, char **argv) {
 	////// Se imprime la solución.
 	printf ("Solucion: \n");
 	EscribeNodo(&solucion);
-        cout<< "Tiempo gastado= "<<t<<endl;
+    cout<< "Tiempo gastado= "<<t<<endl;
 	cout << "Numero de iteraciones = " << iteraciones << endl << endl;
 	liberarMatriz(tsp0);
 }
