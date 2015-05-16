@@ -42,7 +42,7 @@ int siguiente;	// Identificador del siguiente proceso
 bool difundir_cs_local;	// Indica si el proceso puede difundir su cota inferior local
 bool pendiente_retorno_cs;	// Indica si el proceso est� esperando a recibir la cota inferior de otro proceso
 
-char salida_ini[10];
+char salida_ini[14];
 char salida_fin[7];
 
 
@@ -426,13 +426,21 @@ void inicializar_estado_proceso(bool salida=false)
 	(rank==0) ? anterior=size-1 : anterior=rank-1;
 	siguiente = (rank + 1) % size;
 
+	////// Inicializamos el comunicador de carga como una copia de MPI_COMM_WORLD
+	MPI_Comm_split(MPI_COMM_WORLD, 0, rank, &comunicadorCarga);
+
+	//comunicadorCota;	// Para la difusi�n de una nueva cota superior detectada
+
 	// Determinamos el color de la salida por el terminal.
 	// El color dependerá del rank del proceso.
 	char aux[2];
 	sprintf(aux,"%d",31+rank);
 	strcpy(salida_ini,"\033[1;");
 	strcat(salida_ini,aux);
-	strcat(salida_ini,"m");
+	strcat(salida_ini,"mP");
+	sprintf(aux,"%d",rank);
+	strcat(salida_ini,aux);
+	strcat(salida_ini,": ");
 	strcpy(salida_fin,"\033[0m");
 
 	if(salida) {
@@ -459,20 +467,20 @@ void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 		}
 
 		////// Se envía la petición de trabajo.
-		MPI_Isend(&rank, 1, MPI_INT, siguiente, PETICION, MPI_COMM_WORLD, &peticion_trabajo);
+		MPI_Isend(&rank, 1, MPI_INT, siguiente, PETICION, comunicadorCarga, &peticion_trabajo);
 
 		while((*pila).vacia() && activo)
 		{
 			////// Comprobación bloqueante de si hay mensajes pendientes.
-			MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &estado);
+			MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, comunicadorCarga, &estado);
 
 			////// Cuando el proceso se desbloquea, vemos el tipo de mensaje que hay pendiente:
 			switch(estado.MPI_TAG) {
 				////// Se trata de una petición de trabajo.
 				case(PETICION):
 					////// Se recibe la petición y se reenvía al siguiente proceso.
-					MPI_Recv(&rank_aux, 1, MPI_INT, estado.MPI_SOURCE, PETICION, MPI_COMM_WORLD, &estado);
-					MPI_Isend(&rank_aux, 1, MPI_INT, siguiente, PETICION, MPI_COMM_WORLD, &peticion_trabajo_reenviada);
+					MPI_Recv(&rank_aux, 1, MPI_INT, estado.MPI_SOURCE, PETICION, comunicadorCarga, &estado);
+					MPI_Isend(&rank_aux, 1, MPI_INT, siguiente, PETICION, comunicadorCarga, &peticion_trabajo_reenviada);
 					
 					if(salida) {
 						cout<<salida_ini;
@@ -489,6 +497,7 @@ void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 				////// Se trata de un mensaje que contiene nodos de un proceso donante.
 				case(NODOS):
 					////// RECIBIR NODOS EN LA PILA DIRECTAMENTE.
+
 					break;
 			}
 		}
@@ -502,12 +511,12 @@ void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 		int rank_aux;
 
 		////// Comprobamos si hay mensajes pendientes de otros procesos.
-		MPI_Iprobe(MPI_ANY_SOURCE, PETICION, MPI_COMM_WORLD, &num_peticiones, &estado);
+		MPI_Iprobe(MPI_ANY_SOURCE, PETICION, comunicadorCarga, &num_peticiones, &estado);
 
 		////// Mientras halla pendientes peticiones de trabajo...
 		while(num_peticiones > 0) {
 			////// Recibimos la petición de trabajo.
-			MPI_Recv(&rank_aux, 1, MPI_INT, estado.MPI_SOURCE, PETICION, MPI_COMM_WORLD, &estado);
+			MPI_Recv(&rank_aux, 1, MPI_INT, estado.MPI_SOURCE, PETICION, comunicadorCarga, &estado);
 
 			////// Si el número de nodos de la pila supera el umbral donamos nodos.
 			if((*pila).tamanio()>1) {
@@ -515,10 +524,10 @@ void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 			}
 			////// En caso de no tener nodos suficientes, pasamos la petición al siguiente proceso.
 			else {
-				MPI_Isend(&rank_aux, 1, MPI_INT, siguiente, PETICION, MPI_COMM_WORLD, &peticion_trabajo_reenviada);
+				MPI_Isend(&rank_aux, 1, MPI_INT, siguiente, PETICION, comunicadorCarga, &peticion_trabajo_reenviada);
 			}
 			////// Comprobamos si hay mensajes pendientes.
-			MPI_Iprobe(MPI_ANY_SOURCE, PETICION, MPI_COMM_WORLD, &num_peticiones, &estado);
+			MPI_Iprobe(MPI_ANY_SOURCE, PETICION, comunicadorCarga, &num_peticiones, &estado);
 		}
 	}
 }
