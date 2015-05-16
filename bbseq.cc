@@ -11,6 +11,8 @@ using namespace std;
 
 unsigned int NCIUDADES;
 int rank, size;
+char salida_ini[14];
+char salida_fin[7];
 
 main (int argc, char **argv) {
 

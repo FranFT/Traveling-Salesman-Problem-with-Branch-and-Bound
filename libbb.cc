@@ -42,8 +42,8 @@ int siguiente;	// Identificador del siguiente proceso
 bool difundir_cs_local;	// Indica si el proceso puede difundir su cota inferior local
 bool pendiente_retorno_cs;	// Indica si el proceso est� esperando a recibir la cota inferior de otro proceso
 
-char salida_ini[14];
-char salida_fin[7];
+extern char salida_ini[14];
+extern char salida_fin[7];
 
 
 /* ********************************************************************* */
@@ -458,6 +458,7 @@ void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 		MPI_Request peticion_trabajo;
 		MPI_Request peticion_trabajo_reenviada;
 		MPI_Status estado;
+		MPI_Status estado_recepcion_nodos;
 		int rank_aux = -1;
 
 		if(salida) {
@@ -496,8 +497,14 @@ void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 
 				////// Se trata de un mensaje que contiene nodos de un proceso donante.
 				case(NODOS):
-					////// RECIBIR NODOS EN LA PILA DIRECTAMENTE.
+					////// Obtenemos el número de enteros que se han enviado a partir de 'estado'.
+					int num_elementos;
+					MPI_Get_count(&estado, MPI_INT, &num_elementos);
 
+					////// Recibimos ese número de enteros en la pila del proceso.
+					MPI_Recv(&pila->nodos[0],num_elementos, MPI_INT, estado.MPI_SOURCE, NODOS, comunicadorCarga, &estado_recepcion_nodos);
+					////// Actualizamos el tope de la pila.
+					pila->tope = num_elementos;
 					break;
 			}
 		}
@@ -520,7 +527,17 @@ void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 
 			////// Si el número de nodos de la pila supera el umbral donamos nodos.
 			if((*pila).tamanio()>1) {
-				////// Dividir pila y enviar nodos.
+				////// Dividir pila.
+				tPila pila_aux;
+				(*pila).divide(pila_aux);
+
+				if(salida)
+					cout<<salida_ini<<"Enviando nodos al P"<<rank_aux<<"..."<<salida_fin<<endl;
+				////// Enviar nodos.
+				MPI_Send(&pila_aux.nodos[0], 2*NCIUDADES*pila_aux.tamanio(), MPI_INT, rank_aux, NODOS, comunicadorCarga);
+
+				if(salida)
+					cout<<salida_ini<<"Enviados "<<pila_aux.tamanio()<<" nodos al P"<<rank_aux<<salida_fin<<endl;
 			}
 			////// En caso de no tener nodos suficientes, pasamos la petición al siguiente proceso.
 			else {
