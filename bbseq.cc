@@ -184,6 +184,10 @@ main (int argc, char **argv) {
 			////// Si en la iteración actual se ha encontrado una nueva cota superior.
 			////// se acota la pila de nodos usando la nueva cota superior.
 			if (nueva_U) pila.acotar(U);
+
+			////// Llamamos al método de equilibrado de carga.
+			Equilibrar_Carga(&pila, &activo, true);
+
 			////// El ciclo Branch&Bound permanecerá activo mientras se pueda extraer un
 			////// nuevo nodo de la pila.
 			activo = pila.pop(nodo);

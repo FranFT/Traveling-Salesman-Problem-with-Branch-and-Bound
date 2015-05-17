@@ -448,17 +448,37 @@ void inicializar_estado_proceso(bool salida=false)
 		cout<<" Proceso "<<rank<<" de "<<size<<". P"<<anterior<<" --> P"<<rank<<" -->P"<<siguiente;
 		cout<<salida_fin<<endl;
 	}
+
+	////// Parámetros para la detección de fin.
+	////// Color del proceso inicialmente blanco.
+	color = BLANCO;
+	
+	////// Al comienzo, solo el proceso 0 tiene el testigo.
+	if(rank==0) {
+		color_token = BLANCO;
+		token_presente = true;
+	}
+	else {
+		token_presente = false;
+	}
+
+
 }
 
 void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 {
+	//color = BLANCO;
+
 	////// Si la pila se encuentra vacía:
 	if((*pila).vacia()) {
 
 		MPI_Request peticion_trabajo;
 		MPI_Request peticion_trabajo_reenviada;
-		MPI_Status estado;
-		MPI_Status estado_recepcion_nodos;
+		MPI_Request envio_token;
+		MPI_Request envio_fin;
+		MPI_Status estado_sondeo;
+		MPI_Status estado_recepcion;
+		MPI_Status recepcion_fin;
 		int rank_aux = -1;
 
 		if(salida) {
@@ -473,14 +493,14 @@ void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 		while((*pila).vacia() && activo)
 		{
 			////// Comprobación bloqueante de si hay mensajes pendientes.
-			MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, comunicadorCarga, &estado);
+			MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, comunicadorCarga, &estado_sondeo);
 
 			////// Cuando el proceso se desbloquea, vemos el tipo de mensaje que hay pendiente:
-			switch(estado.MPI_TAG) {
+			switch(estado_sondeo.MPI_TAG) {
 				////// Se trata de una petición de trabajo.
 				case(PETICION):
 					////// Se recibe la petición y se reenvía al siguiente proceso.
-					MPI_Recv(&rank_aux, 1, MPI_INT, estado.MPI_SOURCE, PETICION, comunicadorCarga, &estado);
+					MPI_Recv(&rank_aux, 1, MPI_INT, estado_sondeo.MPI_SOURCE, PETICION, comunicadorCarga, &estado_recepcion);
 					MPI_Isend(&rank_aux, 1, MPI_INT, siguiente, PETICION, comunicadorCarga, &peticion_trabajo_reenviada);
 					
 					if(salida) {
@@ -492,6 +512,25 @@ void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 					////// Si hemos recibido la misma petición que enviamos...
 					if(rank_aux == rank){ 
 						////// Iniciar posible detección de fin.
+						////// Marcamos el estado del proceso como Pasivo.
+						estado = PASIVO;
+
+						////// Si el proceso posee el token,
+						if(token_presente) {
+							////// y se trata del proceso 0, colorea el token de blanco. En otro caso del color del proceso.
+							if(rank == 0)
+								color_token = BLANCO;
+							else
+								color_token = color;
+							///////
+							//ENVIAR TESTIGO AL PROCESO ANTERIOR.
+							MPI_Isend(&color_token, 1, MPI_INT, anterior, TOKEN, comunicadorCarga, &envio_token);
+
+							////// Indicamos que el proceso no tiene el testigo.
+							token_presente = false;
+							////// Colocamos el color del proceso en blanco.
+							color = BLANCO;
+						}
 					}
 					break;
 
@@ -499,12 +538,59 @@ void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 				case(NODOS):
 					////// Obtenemos el número de enteros que se han enviado a partir de 'estado'.
 					int num_elementos;
-					MPI_Get_count(&estado, MPI_INT, &num_elementos);
+					MPI_Get_count(&estado_sondeo, MPI_INT, &num_elementos);
 
 					////// Recibimos ese número de enteros en la pila del proceso.
-					MPI_Recv(&pila->nodos[0],num_elementos, MPI_INT, estado.MPI_SOURCE, NODOS, comunicadorCarga, &estado_recepcion_nodos);
+					MPI_Recv(&pila->nodos[0],num_elementos, MPI_INT, estado_sondeo.MPI_SOURCE, NODOS, comunicadorCarga, &estado_recepcion);
 					////// Actualizamos el tope de la pila.
 					pila->tope = num_elementos;
+
+					////// Marcamos como activo el proceso ya que tiene carga de trabajo.
+					estado = ACTIVO;
+					break;
+
+				case(TOKEN):
+					////// Indicamos que el proceso posee el testigo.
+					token_presente = true;
+					////// Si el estado del proceso que recibe el token es pasivo:
+					if(estado == PASIVO) {
+						if(rank == 0 && color == BLANCO && color_token == BLANCO){
+							*activo = false;
+
+							////// ENVIAR MENSAJE DE FIN AL PROCESO SIGUIENTE.
+							int msg_fin = 0;
+							MPI_Isend(&msg_fin, 1, MPI_INT, siguiente, FIN, comunicadorCarga, &envio_fin);
+
+							////// RECIBIR MENSAJES PENDIENTES DE TRABAJO
+							int peticiones_pendientes;
+							MPI_Iprobe(MPI_ANY_SOURCE, PETICION, comunicadorCarga, &peticiones_pendientes, &estado_recepcion);
+							while(peticiones_pendientes>0)
+							{
+								MPI_Recv(&msg_fin, 1, MPI_INT, estado_recepcion.MPI_SOURCE, PETICION, comunicadorCarga, &estado_recepcion);
+								MPI_Iprobe(MPI_ANY_SOURCE, PETICION, comunicadorCarga, &peticiones_pendientes, &estado_recepcion);
+							}
+
+							////// RECIBIR MENSAJE DE FIN (DEL PROCESO ANTERIOR).
+							MPI_Recv(&msg_fin, 1, MPI_INT, anterior, FIN, comunicadorCarga, &recepcion_fin );
+						}
+						else {
+							if(rank==0)	color_token = BLANCO;
+							else color_token = color;
+
+							////// ENVIAR MENSAJE TOKEN A ANTERIOR.
+							MPI_Isend(&color_token, 1, MPI_INT, anterior, TOKEN, comunicadorCarga, &envio_token);
+		
+							token_presente = false;
+							color = BLANCO;
+						}
+					}
+					break;
+				
+				case(FIN):
+					*activo = false;
+					int msg_fin = 0;
+					////// ENVIAR MENSAJE FIN AL PROCESO SIGUIENTE.
+					MPI_Isend(&msg_fin, 1, MPI_INT, siguiente, FIN, comunicadorCarga, &envio_fin);
 					break;
 			}
 		}
@@ -512,39 +598,55 @@ void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 
 	////// El proceso tiene nodos para trabajar.
 	if(activo) {
-		MPI_Status estado;
+		MPI_Status estado_sondeo;
 		MPI_Request peticion_trabajo_reenviada;
 		int num_peticiones;
 		int rank_aux;
 
 		////// Comprobamos si hay mensajes pendientes de otros procesos.
-		MPI_Iprobe(MPI_ANY_SOURCE, PETICION, comunicadorCarga, &num_peticiones, &estado);
+		MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comunicadorCarga, &num_peticiones, &estado_sondeo);
 
 		////// Mientras halla pendientes peticiones de trabajo...
 		while(num_peticiones > 0) {
-			////// Recibimos la petición de trabajo.
-			MPI_Recv(&rank_aux, 1, MPI_INT, estado.MPI_SOURCE, PETICION, comunicadorCarga, &estado);
 
-			////// Si el número de nodos de la pila supera el umbral donamos nodos.
-			if((*pila).tamanio()>1) {
-				////// Dividir pila.
-				tPila pila_aux;
-				(*pila).divide(pila_aux);
+			switch(estado_sondeo.MPI_TAG) {
 
-				if(salida)
-					cout<<salida_ini<<"Enviando nodos al P"<<rank_aux<<"..."<<salida_fin<<endl;
-				////// Enviar nodos.
-				MPI_Send(&pila_aux.nodos[0], 2*NCIUDADES*pila_aux.tamanio(), MPI_INT, rank_aux, NODOS, comunicadorCarga);
+				case(PETICION):
+					////// Recibimos la petición de trabajo.
+					MPI_Recv(&rank_aux, 1, MPI_INT, estado_sondeo.MPI_SOURCE, PETICION, comunicadorCarga, &estado_sondeo);
 
-				if(salida)
-					cout<<salida_ini<<"Enviados "<<pila_aux.tamanio()<<" nodos al P"<<rank_aux<<salida_fin<<endl;
+					////// Si el número de nodos de la pila supera el umbral donamos nodos.
+					if((*pila).tamanio()>1) {
+						////// Dividir pila.
+						tPila pila_aux;
+						(*pila).divide(pila_aux);
+
+						if(salida)
+							cout<<salida_ini<<"Enviando nodos al P"<<rank_aux<<"..."<<salida_fin<<endl;
+						////// Enviar nodos.
+						MPI_Send(&pila_aux.nodos[0], 2*NCIUDADES*pila_aux.tamanio(), MPI_INT, rank_aux, NODOS, comunicadorCarga);
+
+						if(salida)
+							cout<<salida_ini<<"Enviados "<<pila_aux.tamanio()<<" nodos al P"<<rank_aux<<salida_fin<<endl;
+
+						if(rank < rank_aux)	color = NEGRO;
+					}
+					////// En caso de no tener nodos suficientes, pasamos la petición al siguiente proceso.
+					else {
+						MPI_Isend(&rank_aux, 1, MPI_INT, siguiente, PETICION, comunicadorCarga, &peticion_trabajo_reenviada);
+					}
+					break;
+
+				case(TOKEN):
+					token_presente = true;
+
+					////// ¿¿RECIBIR MENSAJE TESTIGO?? - SI
+					MPI_Recv(&color_token, 1, MPI_INT, estado_sondeo.MPI_SOURCE, TOKEN, comunicadorCarga, &estado_sondeo);
+					break;
 			}
-			////// En caso de no tener nodos suficientes, pasamos la petición al siguiente proceso.
-			else {
-				MPI_Isend(&rank_aux, 1, MPI_INT, siguiente, PETICION, comunicadorCarga, &peticion_trabajo_reenviada);
-			}
+
 			////// Comprobamos si hay mensajes pendientes.
-			MPI_Iprobe(MPI_ANY_SOURCE, PETICION, comunicadorCarga, &num_peticiones, &estado);
+			MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comunicadorCarga, &num_peticiones, &estado_sondeo);
 		}
 	}
 }
