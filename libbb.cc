@@ -443,17 +443,17 @@ void inicializar_estado_proceso(bool salida=false)
 	strcat(salida_ini,": ");
 	strcpy(salida_fin,"\033[0m");
 
-	if(salida) {
+	/*if(salida) {
 		cout<<salida_ini;
 		cout<<" Proceso "<<rank<<" de "<<size<<". P"<<anterior<<" --> P"<<rank<<" -->P"<<siguiente;
 		cout<<salida_fin<<endl;
-	}
+	}*/
 
 	////// Parámetros para la detección de fin.
 	////// Color del proceso inicialmente blanco.
 	color = BLANCO;
 	
-	////// Al comienzo, solo el proceso 0 tiene el testigo.
+	////// Al comienzo, el proceso 0 tiene el testigo.
 	if(rank==0) {
 		color_token = BLANCO;
 		token_presente = true;
@@ -462,192 +462,177 @@ void inicializar_estado_proceso(bool salida=false)
 		token_presente = false;
 	}
 
+	if(salida) {
+		cout<<salida_ini;
+		if(token_presente)
+			cout<<" Tengo token ";
+		else
+			cout<<" No tengo token";
+		cout<<salida_fin<<endl;
+	}
 
 }
 
 void Equilibrar_Carga(tPila *pila, bool *activo, bool salida)
 {
-	//color = BLANCO;
+	MPI_Status estado_sondeo;
+	MPI_Request peticion_trabajo_reenviada;
+	int rank_aux;
 
-	////// Si la pila se encuentra vacía:
 	if((*pila).vacia()) {
-
-		MPI_Request peticion_trabajo;
-		MPI_Request peticion_trabajo_reenviada;
-		MPI_Request envio_token;
-		MPI_Request envio_fin;
-		MPI_Status estado_sondeo;
 		MPI_Status estado_recepcion;
 		MPI_Status recepcion_fin;
-		int rank_aux = -1;
 
-		if(salida) {
-			cout<<salida_ini;
-			cout<<"Proceso "<<rank<<" tiene la pila vacía. Enviando petición de trabajo a P"<<siguiente;
-			cout<<salida_fin<<endl;
-		}
+		MPI_Request peticion_trabajo;
+		MPI_Request envio_token;
+		MPI_Request envio_fin;
+
+		int num_elementos;
 
 		////// Se envía la petición de trabajo.
 		MPI_Isend(&rank, 1, MPI_INT, siguiente, PETICION, comunicadorCarga, &peticion_trabajo);
 
-		while((*pila).vacia() && activo)
-		{
+		while((*pila).vacia() && *activo) {
 			////// Comprobación bloqueante de si hay mensajes pendientes.
 			MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, comunicadorCarga, &estado_sondeo);
 
 			////// Cuando el proceso se desbloquea, vemos el tipo de mensaje que hay pendiente:
 			switch(estado_sondeo.MPI_TAG) {
-				////// Se trata de una petición de trabajo.
-				case(PETICION):
+
+				////// Hay un mensaje de petición de trabajo pendiente.
+				case PETICION:
 					////// Se recibe la petición y se reenvía al siguiente proceso.
 					MPI_Recv(&rank_aux, 1, MPI_INT, estado_sondeo.MPI_SOURCE, PETICION, comunicadorCarga, &estado_recepcion);
 					MPI_Isend(&rank_aux, 1, MPI_INT, siguiente, PETICION, comunicadorCarga, &peticion_trabajo_reenviada);
-					
-					if(salida) {
-						cout<<salida_ini;
-						cout<<"Reenviada PETICION del P"<<rank_aux<<" al P"<<siguiente;
-						cout<<salida_fin<<endl;
-					}
 
 					////// Si hemos recibido la misma petición que enviamos...
-					if(rank_aux == rank){ 
+					if(rank_aux == rank) {
 						////// Iniciar posible detección de fin.
 						////// Marcamos el estado del proceso como Pasivo.
 						estado = PASIVO;
-
 						////// Si el proceso posee el token,
 						if(token_presente) {
 							////// y se trata del proceso 0, colorea el token de blanco. En otro caso del color del proceso.
-							if(rank == 0)
-								color_token = BLANCO;
-							else
-								color_token = color;
-							///////
-							//ENVIAR TESTIGO AL PROCESO ANTERIOR.
-							MPI_Isend(&color_token, 1, MPI_INT, anterior, TOKEN, comunicadorCarga, &envio_token);
+							(rank == 0) ? color_token=BLANCO : color_token=color;
 
-							////// Indicamos que el proceso no tiene el testigo.
-							token_presente = false;
-							////// Colocamos el color del proceso en blanco.
-							color = BLANCO;
+							////// Se envía el token al proceso anterior.
+							MPI_Isend(&color_token, 1, MPI_INT, anterior, TOKEN, comunicadorCarga, &envio_token);
 						}
 					}
 					break;
 
-				////// Se trata de un mensaje que contiene nodos de un proceso donante.
-				case(NODOS):
+				////// Hay un mensaje con carga de trabajo pendiente.
+				case NODOS:
 					////// Obtenemos el número de enteros que se han enviado a partir de 'estado'.
-					int num_elementos;
 					MPI_Get_count(&estado_sondeo, MPI_INT, &num_elementos);
 
 					////// Recibimos ese número de enteros en la pila del proceso.
-					MPI_Recv(&pila->nodos[0],num_elementos, MPI_INT, estado_sondeo.MPI_SOURCE, NODOS, comunicadorCarga, &estado_recepcion);
+					MPI_Recv(&pila->nodos[0], num_elementos, MPI_INT, estado_sondeo.MPI_SOURCE, NODOS, comunicadorCarga, &estado_recepcion);
 					////// Actualizamos el tope de la pila.
 					pila->tope = num_elementos;
-
 					////// Marcamos como activo el proceso ya que tiene carga de trabajo.
 					estado = ACTIVO;
 					break;
 
-				case(TOKEN):
-					////// Indicamos que el proceso posee el testigo.
+				case TOKEN:
+					////// Si hay una petición de token, estudiamos los posibles casos.
 					token_presente = true;
-					////// Si el estado del proceso que recibe el token es pasivo:
+					////// Recibimos la petición de token.
+					MPI_Recv(&color_token, 1, MPI_INT, siguiente, TOKEN, comunicadorCarga, &estado_recepcion);
+					cout<<salida_ini<<"Tengo token."<<salida_fin<<endl;
+
 					if(estado == PASIVO) {
-						if(rank == 0 && color == BLANCO && color_token == BLANCO){
+						if(rank==0 && color==BLANCO && color_token==BLANCO) {
+							cout<<salida_ini<<"Fin detectado..."<<salida_fin<<endl;
+							////// Terminación detectada.
+							int msg_fin=0;
+							int peticiones_pendientes;
+
+							////// Indicamos que el ciclo está inactivo.
 							*activo = false;
 
-							////// ENVIAR MENSAJE DE FIN AL PROCESO SIGUIENTE.
-							int msg_fin = 0;
+							////// Envio de mensaje de FIN al proceso siguiente.
 							MPI_Isend(&msg_fin, 1, MPI_INT, siguiente, FIN, comunicadorCarga, &envio_fin);
-
-							////// RECIBIR MENSAJES PENDIENTES DE TRABAJO
-							int peticiones_pendientes;
+							cout<<salida_ini<<"Enviado mensaje de FIN a P"<<siguiente<<salida_fin<<endl;
+							////// Recibir mensajes pendientes de trabajo.
 							MPI_Iprobe(MPI_ANY_SOURCE, PETICION, comunicadorCarga, &peticiones_pendientes, &estado_recepcion);
 							while(peticiones_pendientes>0)
 							{
 								MPI_Recv(&msg_fin, 1, MPI_INT, estado_recepcion.MPI_SOURCE, PETICION, comunicadorCarga, &estado_recepcion);
 								MPI_Iprobe(MPI_ANY_SOURCE, PETICION, comunicadorCarga, &peticiones_pendientes, &estado_recepcion);
 							}
+							cout<<salida_ini<<"Recibidos mensajes pendientes de trabajo."<<salida_fin<<endl;
 
-							////// RECIBIR MENSAJE DE FIN (DEL PROCESO ANTERIOR).
-							MPI_Recv(&msg_fin, 1, MPI_INT, anterior, FIN, comunicadorCarga, &recepcion_fin );
+							////// Recibir mensaje de fin del proceso anterior.
+							MPI_Recv(&msg_fin, 1, MPI_INT, anterior, FIN, comunicadorCarga, &recepcion_fin);
+							cout<<salida_ini<<"Recibido mensaje FIN de P"<<anterior<<salida_fin<<endl;
 						}
 						else {
-							if(rank==0)	color_token = BLANCO;
-							else color_token = color;
-
-							////// ENVIAR MENSAJE TOKEN A ANTERIOR.
+							////// Comprobamos el color del token.
+							(rank==0) ? color_token=BLANCO : color_token=color;
+							////// Se envía el token al proceso anterior.
 							MPI_Isend(&color_token, 1, MPI_INT, anterior, TOKEN, comunicadorCarga, &envio_token);
-		
 							token_presente = false;
 							color = BLANCO;
 						}
 					}
 					break;
-				
-				case(FIN):
+
+				case FIN:
 					*activo = false;
-					int msg_fin = 0;
-					////// ENVIAR MENSAJE FIN AL PROCESO SIGUIENTE.
-					MPI_Isend(&msg_fin, 1, MPI_INT, siguiente, FIN, comunicadorCarga, &envio_fin);
+					int msg_fin=0;
+					MPI_Send(&msg_fin, 1, MPI_INT, siguiente, FIN, comunicadorCarga);
 					break;
 			}
 		}
 	}
 
 	////// El proceso tiene nodos para trabajar.
-	if(activo) {
-		MPI_Status estado_sondeo;
-		MPI_Request peticion_trabajo_reenviada;
+	if(*activo) {
 		int num_peticiones;
-		int rank_aux;
 
 		////// Comprobamos si hay mensajes pendientes de otros procesos.
 		MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comunicadorCarga, &num_peticiones, &estado_sondeo);
 
-		////// Mientras halla pendientes peticiones de trabajo...
-		while(num_peticiones > 0) {
+		////// Mientras halla pendientes peticiones para este proceso:
+		while(num_peticiones>0) {
 
 			switch(estado_sondeo.MPI_TAG) {
-
-				case(PETICION):
+				////// En caso de ser una petición de trabajo:
+				case PETICION:
 					////// Recibimos la petición de trabajo.
 					MPI_Recv(&rank_aux, 1, MPI_INT, estado_sondeo.MPI_SOURCE, PETICION, comunicadorCarga, &estado_sondeo);
 
 					////// Si el número de nodos de la pila supera el umbral donamos nodos.
-					if((*pila).tamanio()>1) {
+					if((*pila).tamanio()>3) {
 						////// Dividir pila.
 						tPila pila_aux;
 						(*pila).divide(pila_aux);
 
-						if(salida)
-							cout<<salida_ini<<"Enviando nodos al P"<<rank_aux<<"..."<<salida_fin<<endl;
 						////// Enviar nodos.
 						MPI_Send(&pila_aux.nodos[0], 2*NCIUDADES*pila_aux.tamanio(), MPI_INT, rank_aux, NODOS, comunicadorCarga);
 
-						if(salida)
-							cout<<salida_ini<<"Enviados "<<pila_aux.tamanio()<<" nodos al P"<<rank_aux<<salida_fin<<endl;
-
-						if(rank < rank_aux)	color = NEGRO;
+						if(rank < rank_aux)
+							color = NEGRO;
 					}
 					////// En caso de no tener nodos suficientes, pasamos la petición al siguiente proceso.
-					else {
+					else
 						MPI_Isend(&rank_aux, 1, MPI_INT, siguiente, PETICION, comunicadorCarga, &peticion_trabajo_reenviada);
-					}
 					break;
 
-				case(TOKEN):
+				case TOKEN:
 					token_presente = true;
-
-					////// ¿¿RECIBIR MENSAJE TESTIGO?? - SI
-					MPI_Recv(&color_token, 1, MPI_INT, estado_sondeo.MPI_SOURCE, TOKEN, comunicadorCarga, &estado_sondeo);
+					////// Recibimos el testigo.
+					MPI_Recv(&color_token, 1, MPI_INT, siguiente, TOKEN, comunicadorCarga, &estado_sondeo);
 					break;
+
 			}
 
-			////// Comprobamos si hay mensajes pendientes.
+			////// Comprobamos si hay mensajes pendientes de otros procesos.
 			MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comunicadorCarga, &num_peticiones, &estado_sondeo);
 		}
 	}
 }
+
+//cout<<salida_ini<< <<salida_fin<<endl;
 

@@ -190,7 +190,7 @@ main (int argc, char **argv) {
 
 			////// El ciclo Branch&Bound permanecerá activo mientras se pueda extraer un
 			////// nuevo nodo de la pila.
-			activo = pila.pop(nodo);
+			if(activo)	activo = pila.pop(nodo);
 			////// Llevamos la cuenta del número de iteraciones empleado usando un contador.
 			iteraciones++;
 		}
