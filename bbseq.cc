@@ -151,7 +151,6 @@ main (int argc, char **argv) {
 					}
 				}
 			}
-	
 			////// Se realiza el mismo proceso para el hijo izquierda en este caso.
 			////// En primer lugar se comprueba si es solución. De ser así,
 			if (Solucion(&lnodo)) {
@@ -181,6 +180,9 @@ main (int argc, char **argv) {
 				}
 			}
 			
+			////// Difusion de la cota superior
+			nueva_U = Difusion_Cota_Superior(&U, nueva_U);
+
 			////// Si en la iteración actual se ha encontrado una nueva cota superior.
 			////// se acota la pila de nodos usando la nueva cota superior.
 			if (nueva_U) pila.acotar(U);
@@ -198,13 +200,13 @@ main (int argc, char **argv) {
 	    t=MPI::Wtime()-t;
 
 		////// Se imprime la solución.
-		if(rank==0)
-		{
+		//if(rank==0)
+		//{
 			printf ("Solucion: \n");
 			EscribeNodo(&solucion);
-		    cout<< "Tiempo gastado= "<<t<<endl;
-			cout << "Numero de iteraciones = " << iteraciones << endl << endl;
-		}
+		    cout<<salida_ini<< "Tiempo gastado= "<<t<<endl;
+			cout << "Numero de iteraciones = " << iteraciones <<salida_fin<< endl << endl;
+		//}
 		liberarMatriz(tsp0);
 	}
 	else if(rank==0){

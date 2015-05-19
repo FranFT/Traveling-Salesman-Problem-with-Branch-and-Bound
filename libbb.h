@@ -218,5 +218,7 @@ void liberarMatriz(int** m);
 void inicializar_estado_proceso(bool salida);
 // Función encargada de equilibrar la carga de trabajo entre los procesos.
 void Equilibrar_Carga(tPila *pila, bool *activo, bool salida);
+// Funcion que distribuye la cota superior y la mantiene actualizada.
+bool Difusion_Cota_Superior(int *U, bool nueva_U);
 
 
